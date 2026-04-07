@@ -14,6 +14,9 @@ if(D._oiAccts)OI_ACCTS=D._oiAccts;
 D.accts=ACCT_INIT.concat(D.customAccts);
 if(D.secDeposit===undefined)D.secDeposit=SEC_DEP;
 if(!D.vendors)D.vendors=INIT_VENDORS;
+if(!D.fixedAssets)D.fixedAssets=[];
+if(!D.leases)D.leases=[];
+if(!D.contracts)D.contracts=[];
 // Also migrate any saved holdings/journals group refs
 
 function saveD(){D._lastSaved=new Date().toISOString();localStorage.setItem(DKEY,JSON.stringify(D));}
@@ -327,7 +330,7 @@ const FB_DOC = 'jpndemo_main';
 const FB_COL = 'appdata';
 let fbReady = false;
 
-fbReady = false;
+try{fbReady = typeof firebase !== 'undefined' && typeof db !== 'undefined' && db !== null;}catch(e){fbReady=false;}
 
 async function fbSave(){
   if(!fbReady) return;
@@ -1094,10 +1097,10 @@ function exportWord(){
 <tr><td style="${S}">자본금</td><td style="${HR}">${fm(acctBal("300"))}</td><td style="${S}"></td></tr>
 <tr><td style="${S}background:#f5f5f5">수입</td><td style="${HR}background:#f5f5f5">${fm(opIn2)}</td><td style="${S}background:#f5f5f5"></td></tr>
 <tr><td style="${S}">지출</td><td style="${HR}color:#dc2626">(${fm(opOut2)})</td><td style="${S}"></td></tr>
-<tr><td style="${S}background:#f5f5f5;font-weight:bold">법인계좌잔액---(1)</td><td style="${HB}background:#f5f5f5">${fm(c.bb)}</td><td style="${S}background:#f5f5f5;color:#888">은행</td></tr>
+<tr><td style="${S}background:#f5f5f5;font-weight:bold">법인계좌잔액---(1)</td><td style="${HB}background:#f5f5f5">${fm(c.bb)}</td><td style="${S}background:#f5f5f5;color:#888">미츠이스미토모</td></tr>
 <tr><td style="${S}">증권예수금</td><td style="${HR}">${fm(c.secDep)}</td><td style="${S}"></td></tr>
 <tr><td style="${S}background:#f5f5f5">유가증권평가액</td><td style="${HR}background:#f5f5f5">${fm(c.allMv)}</td><td style="${S}background:#f5f5f5"></td></tr>
-<tr><td style="${S}font-weight:bold">증권계좌잔액---(2)</td><td style="${HB}">${fm(c.secBal)}</td><td style="${S}color:#888">증권회사</td></tr>
+<tr><td style="${S}font-weight:bold">증권계좌잔액---(2)</td><td style="${HB}">${fm(c.secBal)}</td><td style="${S}color:#888">SMBC닛코증권</td></tr>
 <tr><td style="${S}background:#e8e8e8;font-weight:bold">총보유자산합계</td><td style="${HB}background:#e8e8e8">${fm(c.totA)}</td><td style="${S}background:#e8e8e8;color:#888">(1)+(2)</td></tr></table>
 
 <h2 style="font-size:13pt;color:#1e3a5f;border-bottom:2pt solid #1e3a5f;padding-bottom:4pt">2. 유가증권 평가 및 손익 현황</h2>
@@ -1132,7 +1135,7 @@ ${realRows}
 
   const blob=new Blob([wordHTML],{type:'application/msword'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download='태성_자금운용보고서_'+new Date().toISOString().slice(0,10)+'.doc';
+  a.href=url;a.download='JPNデモ_運用報告書_'+new Date().toISOString().slice(0,10)+'.doc';
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 }
 
@@ -1699,6 +1702,35 @@ function getAlerts(){
     addAlert('🔄','제2기 전환 준비','BS이월 · PL리셋 · 이익잉여금 합산',dJun1,'warn');
   }
 
+  // 9) 계약 만기 알림
+  if(D.contracts&&D.contracts.length>0){
+    D.contracts.forEach(function(ct){
+      if(!ct.endDate||ct.active===false) return;
+      var endD=new Date(ct.endDate);
+      var diffD=Math.ceil((endD-today)/(1000*60*60*24));
+      var alertDays=ct.alertDays||30;
+      if(diffD<0){
+        addAlert('📁','계약 만료: '+ct.name,(ct.counterparty||'')+' — '+ct.endDate+' 만료'+(ct.autoRenew?' (자동갱신)':''),'overdue','urgent');
+      } else if(diffD<=alertDays){
+        addAlert('📁','계약 만기 임박: '+ct.name,(ct.counterparty||'')+' — D-'+diffD+(ct.autoRenew?' (자동갱신)':''),diffD,'warn');
+      }
+    });
+  }
+
+  // 10) 리스/렌탈 만기 알림
+  if(D.leases&&D.leases.length>0){
+    D.leases.forEach(function(ls){
+      if(!ls.endDate||!ls.active) return;
+      var endD=new Date(ls.endDate);
+      var diffD=Math.ceil((endD-today)/(1000*60*60*24));
+      if(diffD<0){
+        addAlert('📋','리스 만료: '+ls.name,(ls.vendor||'')+' — '+ls.endDate+' 만료','overdue','urgent');
+      } else if(diffD<=30){
+        addAlert('📋','리스 만기 임박: '+ls.name,(ls.vendor||'')+' — D-'+diffD,diffD,'warn');
+      }
+    });
+  }
+
   // Sort: urgent first, then warn, then info/daily
   var order={urgent:0,warn:1,info:2,daily:3};
   alerts.sort(function(a,b){return (order[a.cls]||9)-(order[b.cls]||9);});
@@ -1974,10 +2006,10 @@ function rRpt(){const c=calc();
     '<tr><td>지출</td><td class="r m" style="color:#dc2626">('+fm(opOut)+')</td><td class="mu">경비 지출</td></tr>'+
     '<tr class="a" style="font-size:10px;color:#64748b"><td>　참고) 총입금 (증권이체 포함)</td><td class="r m" style="color:#64748b">'+fm(tI-acctBal('300'))+'</td><td class="mu" style="color:#64748b">자본금 외 전체</td></tr>'+
     '<tr style="font-size:10px;color:#64748b"><td>　참고) 총출금 (증권이체 포함)</td><td class="r m" style="color:#64748b">('+fm(tO)+')</td><td></td></tr>'+
-    '<tr class="a" style="font-weight:700"><td>법인계좌잔액---(1)</td><td class="r m b">'+fm(c.bb)+'</td><td class="mu">은행</td></tr>'+
+    '<tr class="a" style="font-weight:700"><td>법인계좌잔액---(1)</td><td class="r m b">'+fm(c.bb)+'</td><td class="mu">미츠이스미토모</td></tr>'+
     '<tr><td>증권예수금</td><td class="r m">'+fm(c.secDep)+'</td><td></td></tr>'+
     '<tr class="a"><td>유가증권평가액</td><td class="r m">'+fm(c.allMv)+'</td><td></td></tr>'+
-    '<tr style="font-weight:700"><td>증권계좌잔액---(2)</td><td class="r m b">'+fm(c.secBal)+'</td><td class="mu">증권회사</td></tr>'+
+    '<tr style="font-weight:700"><td>증권계좌잔액---(2)</td><td class="r m b">'+fm(c.secBal)+'</td><td class="mu">SMBC닛코증권</td></tr>'+
     '<tr class="t"><td>총보유자산합계</td><td class="r m">'+fm(c.totA)+'</td><td class="mu">(1)+(2)</td></tr>'+
     '</tbody></table></div>'+
 
@@ -2030,7 +2062,7 @@ function rRpt(){const c=calc();
 // ===== DATA BACKUP / RESTORE =====
 function exportBackup(){
   const backup={
-    version:'taesung_v26',
+    version:'jpndemo_v26',
     exportDate:new Date().toISOString(),
     data:D,
     settings:SET,
@@ -2041,7 +2073,7 @@ function exportBackup(){
   const url=URL.createObjectURL(blob);
   const a2=document.createElement('a');
   a2.href=url;
-  a2.download='taesung_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a2.download='jpndemo_backup_'+new Date().toISOString().slice(0,10)+'.json';
   document.body.appendChild(a2);a2.click();document.body.removeChild(a2);
   URL.revokeObjectURL(url);
   alert('백업 완료!\n파일: '+a2.download);
@@ -2174,7 +2206,7 @@ function exportGLExcel(){
     bal[j.cr].cr+=j.amt;bal[j.cr].entries.push({...j,isDr:false});
   });
   let html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><style>td,th{mso-number-format:"\@"}</style></head><body>';
-  html+='<h2 style="font-size:14pt;color:#1e3a5f">JPNデモ株式会社　総勘定元帳</h2>';
+  html+='<h2 style="font-size:14pt;color:#1e3a5f">泰成株式会社　総勘定元帳</h2>';
   html+='<p style="font-size:9pt;color:#666">自 令和7年6月2日 至 令和8年4月2日（暫定）</p><br>';
   
   const groups={"자산":"資産","부채":"負債","순자산":"純資産","수익":"収益","비용":"費用"};
@@ -2239,7 +2271,7 @@ function exportFSWord(){
   html+=`
 <div class="stamp"><div class="s1">決裁</div><div class="s2">本人専決</div></div>
 <h1>損 益 計 算 書</h1>
-<div class="sub">JPNデモ株式会社<br>自 令和7年6月2日（設立日）至 令和8年4月2日（暫定）<br>（単位：円）</div>
+<div class="sub">泰成株式会社<br>自 令和7年6月2日（設立日）至 令和8年4月2日（暫定）<br>（単位：円）</div>
 
 <table>
 <tr><th style="width:35%">科目</th><th class="r" style="width:20%">内訳</th><th class="r" style="width:20%">小計</th><th class="r" style="width:25%">合計</th></tr>
@@ -2280,7 +2312,7 @@ function exportFSWord(){
 
 <div class="stamp"><div class="s1">決裁</div><div class="s2">本人専決</div></div>
 <h1>貸 借 対 照 表</h1>
-<div class="sub">JPNデモ株式会社<br>令和8年4月2日現在（暫定）<br>（単位：円）</div>
+<div class="sub">泰成株式会社<br>令和8年4月2日現在（暫定）<br>（単位：円）</div>
 
 <table>
 <tr><th style="width:40%">科目</th><th class="r" style="width:20%">内訳</th><th class="r" style="width:20%">小計</th><th class="r" style="width:20%">合計</th></tr>
@@ -2309,12 +2341,12 @@ function exportFSWord(){
 <tr class="total" style="background:#0d1b3e"><td>負債・純資産合計</td><td></td><td></td><td class="r" style="font-size:12pt">${fm(d.totL+d.totE)}</td></tr>
 </table>
 
-<div class="footer">JPNデモ 財務管理システム ｜ 出力日: ${dateStr} ｜ 本書は暫定値に基づく参考資料です</div>
+<div class="footer">泰成株式会社 財務管理システム ｜ 出力日: ${dateStr} ｜ 本書は暫定値に基づく参考資料です</div>
 </body></html>`;
 
   const blob=new Blob([html],{type:'application/msword'});
   const url=URL.createObjectURL(blob);const a2=document.createElement('a');
-  a2.href=url;a2.download='JPNDemo_財務諸表_'+new Date().toISOString().slice(0,10)+'.doc';
+  a2.href=url;a2.download='泰成_財務諸表_'+new Date().toISOString().slice(0,10)+'.doc';
   document.body.appendChild(a2);a2.click();document.body.removeChild(a2);URL.revokeObjectURL(url);
 }
 
@@ -3029,8 +3061,485 @@ function doAddWithholding(type){
   },200);
 }
 
+// ===== 자산관리: 고정자산대장 / 리스·렌탈 / 계약서 관리 =====
+
+// --- 감가상각 계산 ---
+function calcDepreciation(asset){
+  // Returns: {monthly, annual, accumulated, bookValue, depRate}
+  if(!asset||!asset.acquiredDate||!asset.amount||!asset.usefulLife) return {monthly:0,annual:0,accumulated:0,bookValue:asset?asset.amount:0,depRate:0};
+  var amt=asset.amount;
+  var life=asset.usefulLife;
+  var salvage=asset.salvageValue||1; // 잔존가액 (일본: 비망가액 1엔)
+  var depBase=amt-salvage;
+  var method=asset.depMethod||'SL'; // SL=정액법, DB=정률법
+  var acqDate=new Date(asset.acquiredDate);
+  var now=new Date();
+  // Months elapsed since acquisition
+  var moElapsed=(now.getFullYear()-acqDate.getFullYear())*12+(now.getMonth()-acqDate.getMonth());
+  if(moElapsed<0) moElapsed=0;
+  var totalMo=life*12;
+  if(method==='SL'){
+    // 정액법 (Straight-Line)
+    var annual=Math.round(depBase/life);
+    var monthly=Math.round(annual/12);
+    var accumulated=Math.min(Math.round(monthly*moElapsed),depBase);
+    var bookValue=amt-accumulated;
+    if(bookValue<salvage) {accumulated=depBase;bookValue=salvage;}
+    return {monthly:monthly,annual:annual,accumulated:accumulated,bookValue:bookValue,depRate:Math.round(10000/life)/100};
+  } else {
+    // 정률법 (Declining Balance) — 200% declining balance (일본 기준)
+    var rate=Math.round((2/life)*10000)/10000;
+    var accumulated=0;
+    var bv=amt;
+    // Calculate year by year
+    var years=Math.floor(moElapsed/12);
+    var remMo=moElapsed%12;
+    for(var y=0;y<years;y++){
+      var depY=Math.round(bv*rate);
+      if(bv-depY<salvage) depY=bv-salvage;
+      accumulated+=depY;
+      bv=amt-accumulated;
+      if(bv<=salvage) break;
+    }
+    // Partial year
+    if(remMo>0 && bv>salvage){
+      var depPartial=Math.round(bv*rate*remMo/12);
+      if(bv-depPartial<salvage) depPartial=bv-salvage;
+      accumulated+=depPartial;
+      bv=amt-accumulated;
+    }
+    return {monthly:Math.round(bv*rate/12),annual:Math.round(bv*rate),accumulated:accumulated,bookValue:bv,depRate:Math.round(rate*10000)/100};
+  }
+}
+
+// --- 고정자산 CRUD ---
+function addFixedAsset(){
+  var nm=document.getElementById('fa_name').value.trim();
+  var nmJa=document.getElementById('fa_nameJa').value.trim();
+  var acct=document.getElementById('fa_acct').value;
+  var acqDate=document.getElementById('fa_acqDate').value;
+  var amt=parseInt(document.getElementById('fa_amount').value)||0;
+  var life=parseInt(document.getElementById('fa_life').value)||0;
+  var method=document.getElementById('fa_method').value;
+  var salvage=parseInt(document.getElementById('fa_salvage').value)||1;
+  var memo=document.getElementById('fa_memo').value.trim();
+  if(!nm||!acqDate||!amt||!life){toast('필수 항목을 입력하세요','warn');return;}
+  D.fixedAssets.push({id:nid(),name:nm,nameJa:nmJa,acctCode:acct,acquiredDate:acqDate,amount:amt,usefulLife:life,depMethod:method,salvageValue:salvage,memo:memo,disposed:false,disposedDate:null});
+  saveD();toast('고정자산 등록 완료');go('asset');
+}
+
+function editFixedAsset(id){
+  var a=D.fixedAssets.find(function(x){return x.id===id;});
+  if(!a) return;
+  var acctOpts=ACCT_INIT.filter(function(ac){return ac.c>='160'&&ac.c<='185';}).map(function(ac){return '<option value="'+ac.c+'" '+(a.acctCode===ac.c?'selected':'')+'>'+ac.c+' '+ac.k+'</option>';}).join('');
+  document.getElementById('modal').className='mo';
+  document.getElementById('modal').innerHTML='<div class="mc"><h3>고정자산 수정</h3><div class="fg">'+
+    '<div><label>자산명</label><input id="efa_name" value="'+a.name+'"></div>'+
+    '<div><label>자산명(日)</label><input id="efa_nameJa" value="'+(a.nameJa||'')+'"></div>'+
+    '<div><label>계정과목</label><select id="efa_acct">'+acctOpts+'</select></div>'+
+    '<div><label>취득일</label><input type="date" id="efa_acqDate" value="'+a.acquiredDate+'"></div>'+
+    '<div><label>취득가액 (¥)</label><input type="number" id="efa_amount" value="'+a.amount+'"></div>'+
+    '<div><label>내용연수 (년)</label><input type="number" id="efa_life" value="'+a.usefulLife+'"></div>'+
+    '<div><label>상각방법</label><select id="efa_method"><option value="SL" '+(a.depMethod==='SL'?'selected':'')+'>정액법</option><option value="DB" '+(a.depMethod==='DB'?'selected':'')+'>정률법</option></select></div>'+
+    '<div><label>잔존가액 (¥)</label><input type="number" id="efa_salvage" value="'+(a.salvageValue||1)+'"></div>'+
+    '<div class="full"><label>비고</label><input id="efa_memo" value="'+(a.memo||'')+'"></div>'+
+    '</div><div style="margin-top:14px;display:flex;gap:8px">'+
+    '<button class="bt" onclick="doEditFA('+id+')">저장</button>'+
+    '<button class="bt gh" onclick="document.getElementById(\'modal\').className=\'hidden\'">취소</button>'+
+    (a.disposed?'<button class="bt gn" onclick="restoreFA('+id+')">복구</button>':'<button class="bt rd" onclick="disposeFA('+id+')">처분</button>')+
+    '</div></div>';
+}
+
+function doEditFA(id){
+  var a=D.fixedAssets.find(function(x){return x.id===id;});
+  if(!a) return;
+  a.name=document.getElementById('efa_name').value.trim();
+  a.nameJa=document.getElementById('efa_nameJa').value.trim();
+  a.acctCode=document.getElementById('efa_acct').value;
+  a.acquiredDate=document.getElementById('efa_acqDate').value;
+  a.amount=parseInt(document.getElementById('efa_amount').value)||0;
+  a.usefulLife=parseInt(document.getElementById('efa_life').value)||0;
+  a.depMethod=document.getElementById('efa_method').value;
+  a.salvageValue=parseInt(document.getElementById('efa_salvage').value)||1;
+  a.memo=document.getElementById('efa_memo').value.trim();
+  saveD();toast('수정 완료');document.getElementById('modal').className='hidden';go('asset');
+}
+
+function disposeFA(id){
+  if(!confirm('이 자산을 처분 처리하시겠습니까?')) return;
+  var a=D.fixedAssets.find(function(x){return x.id===id;});
+  if(!a) return;
+  a.disposed=true;a.disposedDate=new Date().toISOString().slice(0,10);
+  saveD();toast('자산 처분 처리 완료');document.getElementById('modal').className='hidden';go('asset');
+}
+
+function restoreFA(id){
+  var a=D.fixedAssets.find(function(x){return x.id===id;});
+  if(!a) return;
+  a.disposed=false;a.disposedDate=null;
+  saveD();toast('자산 복구 완료');document.getElementById('modal').className='hidden';go('asset');
+}
+
+function delFixedAsset(id){
+  if(!confirm('정말 삭제하시겠습니까? (복구 불가)')) return;
+  D.fixedAssets=D.fixedAssets.filter(function(x){return x.id!==id;});
+  saveD();toast('삭제 완료');go('asset');
+}
+
+// --- 리스/렌탈 CRUD ---
+function addLease(){
+  var nm=document.getElementById('ls_name').value.trim();
+  var nmJa=document.getElementById('ls_nameJa').value.trim();
+  var tp=document.getElementById('ls_type').value;
+  var sd=document.getElementById('ls_start').value;
+  var ed=document.getElementById('ls_end').value;
+  var mAmt=parseInt(document.getElementById('ls_monthly').value)||0;
+  var vendor=document.getElementById('ls_vendor').value.trim();
+  var acct=document.getElementById('ls_acct').value;
+  var memo=document.getElementById('ls_memo').value.trim();
+  if(!nm||!sd||!mAmt){toast('필수 항목을 입력하세요','warn');return;}
+  D.leases.push({id:nid(),name:nm,nameJa:nmJa,type:tp,startDate:sd,endDate:ed,monthlyAmt:mAmt,vendor:vendor,acctCode:acct,memo:memo,active:true});
+  saveD();toast('리스/렌탈 등록 완료');go('asset');
+}
+
+function editLease(id){
+  var l=D.leases.find(function(x){return x.id===id;});
+  if(!l) return;
+  var leaseAccts=[{c:'526',k:'임차료'},{c:'548',k:'리스료'},{c:'527',k:'보험료'},{c:'531',k:'차량비'}];
+  var acctOpts=leaseAccts.map(function(ac){return '<option value="'+ac.c+'" '+(l.acctCode===ac.c?'selected':'')+'>'+ac.c+' '+ac.k+'</option>';}).join('');
+  document.getElementById('modal').className='mo';
+  document.getElementById('modal').innerHTML='<div class="mc"><h3>리스/렌탈 수정</h3><div class="fg">'+
+    '<div><label>명칭</label><input id="els_name" value="'+l.name+'"></div>'+
+    '<div><label>명칭(日)</label><input id="els_nameJa" value="'+(l.nameJa||'')+'"></div>'+
+    '<div><label>구분</label><select id="els_type"><option value="lease" '+(l.type==='lease'?'selected':'')+'>리스</option><option value="rental" '+(l.type==='rental'?'selected':'')+'>렌탈</option></select></div>'+
+    '<div><label>비용계정</label><select id="els_acct">'+acctOpts+'</select></div>'+
+    '<div><label>시작일</label><input type="date" id="els_start" value="'+l.startDate+'"></div>'+
+    '<div><label>종료일</label><input type="date" id="els_end" value="'+(l.endDate||'')+'"></div>'+
+    '<div><label>월 금액 (¥)</label><input type="number" id="els_monthly" value="'+l.monthlyAmt+'"></div>'+
+    '<div><label>거래처</label><input id="els_vendor" value="'+(l.vendor||'')+'"></div>'+
+    '<div class="full"><label>비고</label><input id="els_memo" value="'+(l.memo||'')+'"></div>'+
+    '</div><div style="margin-top:14px;display:flex;gap:8px">'+
+    '<button class="bt" onclick="doEditLease('+id+')">저장</button>'+
+    '<button class="bt gh" onclick="document.getElementById(\'modal\').className=\'hidden\'">취소</button>'+
+    '<button class="bt '+(l.active?'rd':'gn')+'" onclick="toggleLease('+id+')">'+(l.active?'비활성화':'활성화')+'</button>'+
+    '</div></div>';
+}
+
+function doEditLease(id){
+  var l=D.leases.find(function(x){return x.id===id;});
+  if(!l) return;
+  l.name=document.getElementById('els_name').value.trim();
+  l.nameJa=document.getElementById('els_nameJa').value.trim();
+  l.type=document.getElementById('els_type').value;
+  l.acctCode=document.getElementById('els_acct').value;
+  l.startDate=document.getElementById('els_start').value;
+  l.endDate=document.getElementById('els_end').value;
+  l.monthlyAmt=parseInt(document.getElementById('els_monthly').value)||0;
+  l.vendor=document.getElementById('els_vendor').value.trim();
+  l.memo=document.getElementById('els_memo').value.trim();
+  saveD();toast('수정 완료');document.getElementById('modal').className='hidden';go('asset');
+}
+
+function toggleLease(id){
+  var l=D.leases.find(function(x){return x.id===id;});
+  if(!l) return;
+  l.active=!l.active;
+  saveD();toast(l.active?'활성화 완료':'비활성화 완료');document.getElementById('modal').className='hidden';go('asset');
+}
+
+function delLease(id){
+  if(!confirm('정말 삭제하시겠습니까?')) return;
+  D.leases=D.leases.filter(function(x){return x.id!==id;});
+  saveD();toast('삭제 완료');go('asset');
+}
+
+// --- 계약서 관리 CRUD ---
+function addContract(){
+  var nm=document.getElementById('ct_name').value.trim();
+  var tp=document.getElementById('ct_type').value;
+  var cp=document.getElementById('ct_counterparty').value.trim();
+  var sd=document.getElementById('ct_start').value;
+  var ed=document.getElementById('ct_end').value;
+  var amt=parseInt(document.getElementById('ct_amount').value)||0;
+  var alert=parseInt(document.getElementById('ct_alert').value)||30;
+  var memo=document.getElementById('ct_memo').value.trim();
+  var autoR=document.getElementById('ct_autoRenew').checked;
+  if(!nm){toast('계약명을 입력하세요','warn');return;}
+  D.contracts.push({id:nid(),name:nm,type:tp,counterparty:cp,startDate:sd,endDate:ed,amount:amt,alertDays:alert,memo:memo,autoRenew:autoR,active:true});
+  saveD();toast('계약 등록 완료');go('asset');
+}
+
+function editContract(id){
+  var c=D.contracts.find(function(x){return x.id===id;});
+  if(!c) return;
+  document.getElementById('modal').className='mo';
+  document.getElementById('modal').innerHTML='<div class="mc"><h3>계약 수정</h3><div class="fg">'+
+    '<div><label>계약명</label><input id="ect_name" value="'+c.name+'"></div>'+
+    '<div><label>구분</label><select id="ect_type">'+
+    '<option value="securities" '+(c.type==='securities'?'selected':'')+'>증권</option>'+
+    '<option value="banking" '+(c.type==='banking'?'selected':'')+'>은행</option>'+
+    '<option value="lease" '+(c.type==='lease'?'selected':'')+'>리스</option>'+
+    '<option value="insurance" '+(c.type==='insurance'?'selected':'')+'>보험</option>'+
+    '<option value="service" '+(c.type==='service'?'selected':'')+'>서비스</option>'+
+    '<option value="other" '+(c.type==='other'?'selected':'')+'>기타</option>'+
+    '</select></div>'+
+    '<div><label>상대방</label><input id="ect_counterparty" value="'+(c.counterparty||'')+'"></div>'+
+    '<div><label>알림 (일전)</label><input type="number" id="ect_alert" value="'+(c.alertDays||30)+'"></div>'+
+    '<div><label>시작일</label><input type="date" id="ect_start" value="'+(c.startDate||'')+'"></div>'+
+    '<div><label>종료일</label><input type="date" id="ect_end" value="'+(c.endDate||'')+'"></div>'+
+    '<div><label>금액 (¥)</label><input type="number" id="ect_amount" value="'+(c.amount||0)+'"></div>'+
+    '<div><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ect_autoRenew" '+(c.autoRenew?'checked':'')+' style="width:auto"> 자동갱신</label></div>'+
+    '<div class="full"><label>비고</label><input id="ect_memo" value="'+(c.memo||'')+'"></div>'+
+    '</div><div style="margin-top:14px;display:flex;gap:8px">'+
+    '<button class="bt" onclick="doEditContract('+id+')">저장</button>'+
+    '<button class="bt gh" onclick="document.getElementById(\'modal\').className=\'hidden\'">취소</button>'+
+    '</div></div>';
+}
+
+function doEditContract(id){
+  var c=D.contracts.find(function(x){return x.id===id;});
+  if(!c) return;
+  c.name=document.getElementById('ect_name').value.trim();
+  c.type=document.getElementById('ect_type').value;
+  c.counterparty=document.getElementById('ect_counterparty').value.trim();
+  c.alertDays=parseInt(document.getElementById('ect_alert').value)||30;
+  c.startDate=document.getElementById('ect_start').value;
+  c.endDate=document.getElementById('ect_end').value;
+  c.amount=parseInt(document.getElementById('ect_amount').value)||0;
+  c.autoRenew=document.getElementById('ect_autoRenew').checked;
+  c.memo=document.getElementById('ect_memo').value.trim();
+  saveD();toast('수정 완료');document.getElementById('modal').className='hidden';go('asset');
+}
+
+function delContract(id){
+  if(!confirm('정말 삭제하시겠습니까?')) return;
+  D.contracts=D.contracts.filter(function(x){return x.id!==id;});
+  saveD();toast('삭제 완료');go('asset');
+}
+
+// --- 자산관리 탭별 렌더링 ---
+
+function rFATab(){
+  // 고정자산대장
+  var acctOpts=ACCT_INIT.filter(function(ac){return ac.c>='160'&&ac.c<='185';}).map(function(ac){return '<option value="'+ac.c+'">'+ac.c+' '+ac.k+'</option>';}).join('');
+  var html='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">🏗️ 고정자산 등록</div>';
+  html+='<div class="fg">';
+  html+='<div><label>자산명 *</label><input id="fa_name" placeholder="예: 업무용 노트북"></div>';
+  html+='<div><label>자산명(日)</label><input id="fa_nameJa" placeholder="業務用ノートPC"></div>';
+  html+='<div><label>계정과목</label><select id="fa_acct">'+acctOpts+'</select></div>';
+  html+='<div><label>취득일 *</label><input type="date" id="fa_acqDate"></div>';
+  html+='<div><label>취득가액 (¥) *</label><input type="number" id="fa_amount" placeholder="200000"></div>';
+  html+='<div><label>내용연수 (년) *</label><input type="number" id="fa_life" placeholder="4" value="4"></div>';
+  html+='<div><label>상각방법</label><select id="fa_method"><option value="SL">정액법 (定額法)</option><option value="DB">정률법 (定率法)</option></select></div>';
+  html+='<div><label>잔존가액 (¥)</label><input type="number" id="fa_salvage" value="1" placeholder="1 (비망가액)"></div>';
+  html+='<div class="full"><label>비고</label><input id="fa_memo" placeholder="메모"></div>';
+  html+='</div><div style="margin-top:10px"><button class="bt" onclick="addFixedAsset()">등록</button></div></div>';
+
+  // 목록
+  var items=D.fixedAssets||[];
+  var activeItems=items.filter(function(a){return !a.disposed;});
+  var disposedItems=items.filter(function(a){return a.disposed;});
+  var totalBook=0,totalDep=0,totalAcq=0;
+
+  if(activeItems.length>0){
+    html+='<div class="pn" style="margin-top:14px"><div class="ph"><span>보유 자산 ('+activeItems.length+'건)</span></div>';
+    html+='<div style="overflow-x:auto"><table><thead><tr><th>자산명</th><th>계정</th><th>취득일</th><th class="r">취득가액</th><th>연수</th><th>방법</th><th class="r">상각누계</th><th class="r">장부가액</th><th class="r">월상각액</th><th></th></tr></thead><tbody>';
+    activeItems.forEach(function(a){
+      var dep=calcDepreciation(a);
+      totalAcq+=a.amount;totalDep+=dep.accumulated;totalBook+=dep.bookValue;
+      var acctName=(D.accts.find(function(ac){return ac.c===a.acctCode;})||{}).k||a.acctCode;
+      var methodLabel=a.depMethod==='DB'?'정률':'정액';
+      // Progress bar
+      var pct=a.amount>0?Math.round(dep.accumulated/a.amount*100):0;
+      html+='<tr><td><a href="javascript:void(0)" onclick="editFixedAsset('+a.id+')" style="color:#2563eb;text-decoration:underline">'+a.name+'</a>'+(a.nameJa?'<br><span style="font-size:9px;color:#64748b">'+a.nameJa+'</span>':'')+'</td>';
+      html+='<td>'+acctName+'</td><td>'+a.acquiredDate+'</td><td class="r m">'+fm(a.amount)+'</td>';
+      html+='<td>'+a.usefulLife+'년</td><td>'+methodLabel+'</td>';
+      html+='<td class="r m rd">'+fm(dep.accumulated)+'</td><td class="r m b">'+fm(dep.bookValue)+'</td>';
+      html+='<td class="r m">'+fm(dep.monthly)+'</td>';
+      html+='<td><button class="del" onclick="delFixedAsset('+a.id+')">삭제</button></td></tr>';
+      html+='<tr><td colspan="9" style="padding:2px 6px 6px"><div style="background:#e2e6ed;border-radius:3px;height:4px;overflow:hidden"><div style="background:#2563eb;height:100%;width:'+pct+'%"></div></div><span style="font-size:9px;color:#64748b">상각률 '+pct+'%</span></td><td></td></tr>';
+    });
+    html+='</tbody><tfoot><tr class="t"><td colspan="3">합계</td><td class="r m">'+fm(totalAcq)+'</td><td colspan="2"></td><td class="r m rd">'+fm(totalDep)+'</td><td class="r m">'+fm(totalBook)+'</td><td></td><td></td></tr></tfoot></table></div></div>';
+  }
+
+  if(disposedItems.length>0){
+    html+='<div class="pn" style="margin-top:14px"><div class="ph"><span>처분 자산 ('+disposedItems.length+'건)</span></div>';
+    html+='<div style="overflow-x:auto"><table><thead><tr><th>자산명</th><th>취득일</th><th class="r">취득가액</th><th>처분일</th><th></th></tr></thead><tbody>';
+    disposedItems.forEach(function(a){
+      html+='<tr style="opacity:0.6"><td><a href="javascript:void(0)" onclick="editFixedAsset('+a.id+')" style="color:#64748b">'+a.name+'</a></td>';
+      html+='<td>'+a.acquiredDate+'</td><td class="r m">'+fm(a.amount)+'</td><td>'+(a.disposedDate||'-')+'</td>';
+      html+='<td><button class="del" onclick="delFixedAsset('+a.id+')">삭제</button></td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+
+  if(items.length===0){
+    html+='<div class="ib" style="margin-top:14px">등록된 고정자산이 없습니다. 차량, PC, 사무기기 등을 등록하세요.</div>';
+  }
+
+  // 감가상각 참고표
+  html+='<div class="ib" style="margin-top:14px;font-size:10px">💡 <b>일본 감가상각 기준:</b> 잔존가액 = 비망가액 1엔 (税法基準). 정액법: 매년 균등 상각. 정률법: 200%정률법 (取得日 기준). 내용연수 예시: PC 4년, 차량 6년, 건물(목조) 22년, 건물(RC) 47년, 비품 5~15년</div>';
+  return html;
+}
+
+function rLeaseTab(){
+  var leaseAccts=[{c:'526',k:'임차료'},{c:'548',k:'리스료'},{c:'527',k:'보험료'},{c:'531',k:'차량비'}];
+  var acctOpts=leaseAccts.map(function(ac){return '<option value="'+ac.c+'">'+ac.c+' '+ac.k+'</option>';}).join('');
+  var html='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">📋 리스/렌탈 등록</div>';
+  html+='<div class="fg">';
+  html+='<div><label>명칭 *</label><input id="ls_name" placeholder="예: 사무실 임차"></div>';
+  html+='<div><label>명칭(日)</label><input id="ls_nameJa" placeholder="事務所賃貸"></div>';
+  html+='<div><label>구분</label><select id="ls_type"><option value="lease">리스</option><option value="rental">렌탈</option></select></div>';
+  html+='<div><label>비용계정</label><select id="ls_acct">'+acctOpts+'</select></div>';
+  html+='<div><label>시작일 *</label><input type="date" id="ls_start"></div>';
+  html+='<div><label>종료일</label><input type="date" id="ls_end"></div>';
+  html+='<div><label>월 금액 (¥) *</label><input type="number" id="ls_monthly" placeholder="50000"></div>';
+  html+='<div><label>거래처</label><input id="ls_vendor" placeholder="임대인/리스사"></div>';
+  html+='<div class="full"><label>비고</label><input id="ls_memo" placeholder="메모"></div>';
+  html+='</div><div style="margin-top:10px"><button class="bt" onclick="addLease()">등록</button></div></div>';
+
+  var items=D.leases||[];
+  var activeItems=items.filter(function(l){return l.active;});
+  var inactiveItems=items.filter(function(l){return !l.active;});
+  var today=new Date();
+  var totalMonthly=0;
+
+  if(activeItems.length>0){
+    html+='<div class="pn" style="margin-top:14px"><div class="ph"><span>활성 계약 ('+activeItems.length+'건)</span></div>';
+    html+='<div style="overflow-x:auto"><table><thead><tr><th>명칭</th><th>구분</th><th>계정</th><th>시작일</th><th>종료일</th><th class="r">월 금액</th><th>거래처</th><th>잔여기간</th><th></th></tr></thead><tbody>';
+    activeItems.forEach(function(l){
+      totalMonthly+=l.monthlyAmt;
+      var acctName=(D.accts.find(function(ac){return ac.c===l.acctCode;})||{}).k||l.acctCode;
+      var typeLabel=l.type==='lease'?'리스':'렌탈';
+      // Remaining days
+      var remaining='-';
+      if(l.endDate){
+        var endD=new Date(l.endDate);
+        var diffD=Math.ceil((endD-today)/(1000*60*60*24));
+        if(diffD<0) remaining='<span style="color:#dc2626;font-weight:600">만료</span>';
+        else if(diffD<=30) remaining='<span style="color:#d97706;font-weight:600">'+diffD+'일</span>';
+        else remaining=diffD+'일';
+      }
+      html+='<tr><td><a href="javascript:void(0)" onclick="editLease('+l.id+')" style="color:#2563eb;text-decoration:underline">'+l.name+'</a>'+(l.nameJa?'<br><span style="font-size:9px;color:#64748b">'+l.nameJa+'</span>':'')+'</td>';
+      html+='<td><span class="bg '+(l.type==='lease'?'p':'n')+'">'+typeLabel+'</span></td>';
+      html+='<td>'+acctName+'</td><td>'+(l.startDate||'-')+'</td><td>'+(l.endDate||'없음')+'</td>';
+      html+='<td class="r m b">'+fm(l.monthlyAmt)+'</td><td>'+(l.vendor||'-')+'</td><td>'+remaining+'</td>';
+      html+='<td><button class="del" onclick="delLease('+l.id+')">삭제</button></td></tr>';
+    });
+    html+='</tbody><tfoot><tr class="t"><td colspan="5">월 합계</td><td class="r m">'+fm(totalMonthly)+'</td><td colspan="3"></td></tr>';
+    html+='<tr class="t"><td colspan="5">연간 추정</td><td class="r m">'+fm(totalMonthly*12)+'</td><td colspan="3"></td></tr></tfoot></table></div></div>';
+  }
+
+  if(inactiveItems.length>0){
+    html+='<div class="pn" style="margin-top:14px"><div class="ph"><span>비활성 계약 ('+inactiveItems.length+'건)</span></div>';
+    html+='<div style="overflow-x:auto"><table><thead><tr><th>명칭</th><th>구분</th><th>종료일</th><th class="r">월 금액</th><th></th></tr></thead><tbody>';
+    inactiveItems.forEach(function(l){
+      html+='<tr style="opacity:0.6"><td><a href="javascript:void(0)" onclick="editLease('+l.id+')" style="color:#64748b">'+l.name+'</a></td>';
+      html+='<td>'+(l.type==='lease'?'리스':'렌탈')+'</td><td>'+(l.endDate||'-')+'</td>';
+      html+='<td class="r m">'+fm(l.monthlyAmt)+'</td>';
+      html+='<td><button class="del" onclick="delLease('+l.id+')">삭제</button></td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+
+  if(items.length===0){
+    html+='<div class="ib" style="margin-top:14px">등록된 리스/렌탈이 없습니다. 사무실, 차량, 복합기 등의 리스/렌탈 계약을 등록하세요.</div>';
+  }
+
+  html+='<div class="ib" style="margin-top:14px;font-size:10px">💡 <b>리스 vs 렌탈:</b> 리스 = 장기 계약(보통 3~7년), 중도해지 불가. 렌탈 = 단기 계약, 해지 자유. 비용계정: 리스→548(リース料), 렌탈→526(地代家賃)으로 분류</div>';
+  return html;
+}
+
+function rContractTab(){
+  var typeLabels={securities:'증권',banking:'은행',lease:'리스',insurance:'보험',service:'서비스',other:'기타'};
+  var typeColors={securities:'#2563eb',banking:'#059669',lease:'#d97706',insurance:'#7c3aed',service:'#0891b2',other:'#64748b'};
+
+  var html='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:12px">📁 계약 등록</div>';
+  html+='<div class="fg">';
+  html+='<div><label>계약명 *</label><input id="ct_name" placeholder="예: SMBC닛코증권 특정구좌"></div>';
+  html+='<div><label>구분</label><select id="ct_type"><option value="securities">증권</option><option value="banking">은행</option><option value="lease">리스</option><option value="insurance">보험</option><option value="service">서비스</option><option value="other">기타</option></select></div>';
+  html+='<div><label>상대방</label><input id="ct_counterparty" placeholder="SMBC日興証券"></div>';
+  html+='<div><label>만기 알림 (일전)</label><input type="number" id="ct_alert" value="30"></div>';
+  html+='<div><label>시작일</label><input type="date" id="ct_start"></div>';
+  html+='<div><label>종료일</label><input type="date" id="ct_end"></div>';
+  html+='<div><label>금액 (¥)</label><input type="number" id="ct_amount" placeholder="0"></div>';
+  html+='<div><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ct_autoRenew" style="width:auto"> 자동갱신</label></div>';
+  html+='<div class="full"><label>비고</label><input id="ct_memo" placeholder="메모"></div>';
+  html+='</div><div style="margin-top:10px"><button class="bt" onclick="addContract()">등록</button></div></div>';
+
+  var items=(D.contracts||[]).filter(function(c){return c.active!==false;});
+  var today=new Date();
+
+  if(items.length>0){
+    // Sort by end date (nearest first)
+    var sorted=items.slice().sort(function(a,b){
+      if(!a.endDate && !b.endDate) return 0;
+      if(!a.endDate) return 1;
+      if(!b.endDate) return -1;
+      return new Date(a.endDate)-new Date(b.endDate);
+    });
+
+    html+='<div class="pn" style="margin-top:14px"><div class="ph"><span>계약 목록 ('+items.length+'건)</span></div>';
+    html+='<div style="overflow-x:auto"><table><thead><tr><th>계약명</th><th>구분</th><th>상대방</th><th>시작일</th><th>종료일</th><th class="r">금액</th><th>갱신</th><th>상태</th><th></th></tr></thead><tbody>';
+    sorted.forEach(function(c){
+      var tl=typeLabels[c.type]||c.type;
+      var tc=typeColors[c.type]||'#64748b';
+      // Status
+      var status='-';
+      if(c.endDate){
+        var endD=new Date(c.endDate);
+        var diffD=Math.ceil((endD-today)/(1000*60*60*24));
+        if(diffD<0) status='<span style="color:#dc2626;font-weight:700">만료</span>';
+        else if(diffD<=(c.alertDays||30)) status='<span style="color:#d97706;font-weight:700">D-'+diffD+'</span>';
+        else status='<span style="color:#059669">'+diffD+'일</span>';
+      } else {
+        status='<span style="color:#64748b">무기한</span>';
+      }
+      html+='<tr><td><a href="javascript:void(0)" onclick="editContract('+c.id+')" style="color:#2563eb;text-decoration:underline">'+c.name+'</a></td>';
+      html+='<td><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:'+tc+'22;color:'+tc+'">'+tl+'</span></td>';
+      html+='<td>'+(c.counterparty||'-')+'</td><td>'+(c.startDate||'-')+'</td><td>'+(c.endDate||'없음')+'</td>';
+      html+='<td class="r m">'+(c.amount?fm(c.amount):'-')+'</td>';
+      html+='<td>'+(c.autoRenew?'<span style="color:#059669">자동</span>':'수동')+'</td>';
+      html+='<td>'+status+'</td>';
+      html+='<td><button class="del" onclick="delContract('+c.id+')">삭제</button></td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  } else {
+    html+='<div class="ib" style="margin-top:14px">등록된 계약이 없습니다. 증권계좌, 은행계좌, 보험, 리스 등의 계약을 등록하세요.</div>';
+  }
+
+  // 만기 임박 요약
+  var expiring=(D.contracts||[]).filter(function(c){
+    if(!c.endDate||c.active===false) return false;
+    var diffD=Math.ceil((new Date(c.endDate)-today)/(1000*60*60*24));
+    return diffD>=0 && diffD<=(c.alertDays||30);
+  });
+  if(expiring.length>0){
+    html+='<div class="pn" style="margin-top:14px;border-left:4px solid #d97706"><div class="ph" style="color:#d97706">⚠️ 만기 임박 계약 ('+expiring.length+'건)</div><div style="padding:8px 12px">';
+    expiring.forEach(function(c){
+      var diffD=Math.ceil((new Date(c.endDate)-today)/(1000*60*60*24));
+      html+='<div style="padding:4px 0;font-size:12px"><span style="color:#d97706;font-weight:600">D-'+diffD+'</span> '+c.name+' ('+c.endDate+') '+(c.autoRenew?'<span style="color:#059669;font-size:10px">자동갱신</span>':'')+'</div>';
+    });
+    html+='</div></div>';
+  }
+
+  html+='<div class="ib" style="margin-top:14px;font-size:10px">💡 만기 알림은 대시보드에도 표시됩니다. 알림 일수(기본 30일)를 계약별로 설정할 수 있습니다.</div>';
+  return html;
+}
+
+// --- 자산관리 메인 페이지 ---
+function rAsset(){
+  return '<div class="pt">자산관리</div>'+
+  '<div class="tabs">'+
+    '<div class="tab on" data-tab="fa">🏗️ 고정자산</div>'+
+    '<div class="tab" data-tab="lease">📋 리스/렌탈</div>'+
+    '<div class="tab" data-tab="contract">📁 계약서</div>'+
+  '</div>'+
+  '<div id="TC">'+rFATab()+'</div>';
+}
+
 // ===== ROUTING =====
-const pages={dash:rDash,slip:rSlip,jrn:rJrn,gl:rGL,fs:rFS,sec:rSec,bank:rBank,rpt:rRpt,oi:rOI,set:rSet};
+const pages={dash:rDash,slip:rSlip,jrn:rJrn,gl:rGL,fs:rFS,sec:rSec,bank:rBank,rpt:rRpt,oi:rOI,asset:rAsset,set:rSet};
 let cur='dash';
 
 function go(p){
@@ -3045,6 +3554,7 @@ function go(p){
     const tc=document.getElementById('TC'),id=this.dataset.tab;if(!tc)return;
     if(cur==='sec'){if(id==='real')tc.innerHTML=rRealTab();else go('sec');}
     if(cur==='fs'){if(id==='bs')tc.innerHTML=rBSTab();else if(id==='tx')tc.innerHTML=rTxTab();else if(id==='expense'){tc.innerHTML='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:10px">📊 월별 비용분석</div>'+rExpenseAnalysis()+'</div>';}else if(id==='monthly')tc.innerHTML='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:10px">📅 월차 추이</div>'+rMonthlyTable()+'</div>';else if(id==='cashflow')tc.innerHTML='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:10px">💰 월별 현금흐름표</div>'+rCashFlow()+'</div>';else if(id==='taxsum')tc.innerHTML='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:10px">🧾 소비세 집계표</div>'+rTaxSummary()+'</div>';else if(id==='withholding')tc.innerHTML='<div class="pn" style="padding:14px"><div style="font-size:14px;font-weight:700;margin-bottom:10px">💰 원천징수세 관리 (155)</div>'+rWithholding()+'</div>';else go('fs');}
+    if(cur==='asset'){if(id==='fa')tc.innerHTML=rFATab();else if(id==='lease')tc.innerHTML=rLeaseTab();else if(id==='contract')tc.innerHTML=rContractTab();}
   }));
 }
 
@@ -3098,7 +3608,7 @@ function rTxTab(){
   
   return '<div class="pn" style="padding:18px;max-width:520px">'+
     '<div style="text-align:center;font-size:14px;font-weight:700;margin-bottom:4px">법인세 등 추정 상세</div>'+
-    '<div style="text-align:center;font-size:10px;color:#64748b;margin-bottom:14px">JPNデモ株式会社 (자본금5백만엔, 도쿄도, 소규모법인)</div>'+
+    '<div style="text-align:center;font-size:10px;color:#64748b;margin-bottom:14px">JPNデモ株式会社 (자본금1천만엔, 도쿄도, 소규모법인)</div>'+
     '<div class="fr h"><span>경상이익 (과세소득)</span><span class="m">'+fm(oi)+'</span></div>'+
     '<div style="height:8px"></div>'+
     '<div class="fr h" style="color:#1e3a5f"><span>① 국세</span></div>'+
