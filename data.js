@@ -163,3 +163,5 @@ const INIT_VENDORS=[
 {id:5,name:"料亭 山水",note:"접대"}
 ];
 const DEF_SET={rates:{USDJPY:150.00,JPYKRW:9.10},reportDate:""};
+let SET;
+try{const sv=localStorage.getItem('jpndemo_settings');SET=sv?{...DEF_SET,...JSON.parse(sv),rates:{...DEF_SET.rates,...(JSON.parse(sv).rates||{})}}:{...DEF_SET};}catch(e){SET={...DEF_SET};}
