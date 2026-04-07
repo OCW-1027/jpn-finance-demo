@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>JPNデモ 재무관리시스템</title>
+<link rel="stylesheet" href="style.css?v=1775235161">
+</head>
+<body>
+<div class="app">
+<nav class="nav">
+  <div class="nav-hd"><h3>재무관리시스템</h3><p>JPNデモ株式会社</p><p style="font-size:9px;color:#475569">DEMO</p></div>
+  <div class="ni on" data-page="dash" title="대시보드"><span>📊</span><span>대시보드</span></div>
+  <div class="ni" data-page="slip" title="전표처리"><span>📝</span><span>전표처리</span></div>
+  <div class="ni" data-page="jrn" title="전표조회"><span>📝</span><span>전표조회</span></div>
+  <div class="ni" data-page="gl" title="총계정원장"><span>📒</span><span>총계정원장</span></div>
+  <div class="ni" data-page="fs" title="재무제표"><span>📋</span><span>재무제표</span></div>
+  <div class="ni" data-page="sec" title="유가증권"><span>📈</span><span>유가증권</span></div>
+  <div class="ni" data-page="bank" title="법인계좌"><span>🏦</span><span>법인계좌</span></div>
+  <div class="ni" data-page="rpt" title="운용보고서"><span>📄</span><span>운용보고서</span></div>
+  <div class="ni" data-page="set" title="설정"><span>⚙️</span><span>설정</span></div>
+  <div class="ni" onclick="showSyncModal()"><span>☁️</span><span>동기화</span></div>
+  <div class="ni" onclick="document.getElementById('calc').classList.toggle('hidden')"><span>🧮</span><span>계산기</span></div>
+</nav>
+<main class="main" id="M"></main>
+</div>
+<div id="calc" class="hidden" style="position:fixed;bottom:16px;right:16px;width:250px;background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.2);z-index:200;border:1px solid #e2e6ed;overflow:hidden">
+  <div style="display:flex;justify-content:space-between;padding:6px 10px;background:#1e3a5f;color:#fff"><span>🧮 계산기</span><button onclick="document.getElementById('calc').classList.add('hidden')" style="background:none;border:none;color:#fff;cursor:pointer">✕</button></div>
+  <div id="cD" style="padding:8px;text-align:right;font-size:22px;font-weight:700;min-height:32px">0</div>
+  <div id="cK" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;padding:2px 3px 3px"></div>
+</div>
+<div id="modal" class="hidden"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyChjWfvQhha3oDhnL7OwsK_IoArC9mpIiw",
+  authDomain: "taesung-finance.firebaseapp.com",
+  projectId: "taesung-finance",
+  storageBucket: "taesung-finance.firebasestorage.app",
+  messagingSenderId: "981953361911",
+  appId: "1:981953361911:web:fa65288dd64d7a74e860f2"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+</script>
+
+<script src="data.js?v=1775235161"></script>
+<script src="lang.js?v=1775235161"></script>
+<script src="app.js?v=1775235161"></script>
+
+<!-- PIN Lock Screen -->
+<div id="lockScreen" style="display:none!important;position:fixed;inset:0;background:linear-gradient(135deg,#1e293b,#0f172a);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="text-align:center;color:#fff">
+    <div style="font-size:40px;margin-bottom:12px">🔒</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px">JPNデモ 재무관리시스템</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:24px" id="lockMsg">PIN을 입력하세요</div>
+    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px">
+      <span class="pin-dot" id="pd0"></span><span class="pin-dot" id="pd1"></span>
+      <span class="pin-dot" id="pd2"></span><span class="pin-dot" id="pd3"></span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,64px);gap:8px;justify-content:center" id="pinPad"></div>
+    <div style="margin-top:16px;font-size:11px;color:#475569" id="lockExtra"></div>
+  </div>
+</div>
+</body>
+</html>
