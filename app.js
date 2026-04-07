@@ -325,7 +325,7 @@ const FB_DOC = 'jpndemo_main';
 const FB_COL = 'appdata';
 let fbReady = false;
 
-try{fbReady = typeof firebase !== 'undefined' && typeof db !== 'undefined' && db !== null;}catch(e){fbReady=false;}
+// Demo: Firebase disabled
 
 async function fbSave(){
   if(!fbReady) return;
